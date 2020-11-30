@@ -20,14 +20,36 @@
 <td align="left">unchanged</td>
 <td align="left">copy from effective user id</td>
 </tr>
+</tbody></table>
+<p>Here is a demo, I first compile a simple program into <code>a.out</code>, then use <code>chown root:root a.out</code> to change the ower of the executable file, after that I use <code>chmod +s a.out</code> to set setuid bit. The output of <code>ls -l a.out</code> is: <code>-rwsrwsr-x 1 root root 14600 Apr 24 08:02 a.out</code>. After start <code>a.out</code>, the output of <code>ps -o pid,ppid,euid,ruid,suid,cmd -p 16990,17210</code> is:</p>
+<table>
+<thead>
 <tr>
-<td align="left">Here is a demo, I first compile a simple program into <code>a.out</code>, then use <code>chown root:root a.out</code> to change the ower of the executable file, after that I use <code>chmod +s a.out</code> to set setuid bit. The output of <code>ls -l a.out</code> is: <code>-rwsrwsr-x 1 root root 14600 Apr 24 08:02 a.out</code>. After start <code>a.out</code>, the output of <code>ps -o pid,ppid,euid,ruid,suid,cmd -p 16990,17210</code> is:</td>
-<td align="left"></td>
-<td align="left"></td>
-<td align="left"></td>
+<th align="left">PID</th>
+<th align="left">PPID</th>
+<th align="left">EUID</th>
+<th align="left">RUID</th>
+<th align="left">SUID</th>
+<th align="left">CMD</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">16990</td>
+<td align="left">16989</td>
+<td align="left">1001</td>
+<td align="left">1001</td>
+<td align="left">1001</td>
+<td align="left">-bash</td>
+</tr>
+<tr>
+<td align="left">17210</td>
+<td align="left">16990</td>
+<td align="left">0</td>
+<td align="left">1001</td>
+<td align="left">0</td>
+<td align="left">./a.out</td>
 </tr>
 </tbody></table>
-<p>|  PID | PPID | EUID | RUID | SUID | CMD |<br>|:—|:—|:—|:—|:—|:—|:—|<br>| 16990 | 16989 |  1001 | 1001 | 1001 | -bash|<br>| 17210 | 16990 |    0 | 1001 |    0 | ./a.out|</p>
 <p>We can notice that EUID of <code>a.out</code> is root, RUID keeps same as its parent process, SUID is same as EUID.</p>
 <hr>
 <p>Permission check is based on effective user id. UNIX system provides these system calls to manipulate these three UID: <a href="http://man7.org/linux/man-pages/man2/setuid.2.html" target="_blank" rel="noopener">setuid</a>, <a href="http://man7.org/linux/man-pages/man2/seteuid.2.html" target="_blank" rel="noopener">seteuid</a>. How these system call affect three UID is based on whether the process has root privilege.</p>
