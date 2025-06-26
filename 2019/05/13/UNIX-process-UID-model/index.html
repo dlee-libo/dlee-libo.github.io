@@ -1,0 +1,113 @@
+<!DOCTYPE html><html lang="zh-cn"><head><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title> UNIX process UID model · dlee 的 Blog</title><meta name="description" content="UNIX process UID model - dlee"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.png"><link rel="stylesheet" href="/css/apollo.css"><link rel="search" type="application/opensearchdescription+xml" href="http://dlee-libo.github.io/atom.xml" title="dlee 的 Blog"><meta name="generator" content="Hexo 4.2.1"></head><body><div class="wrap"><header><ul class="nav nav-list"><li class="nav-list-item"><a href="/" target="_self" class="nav-list-link">BLOG</a></li><li class="nav-list-item"><a href="/archives/" target="_self" class="nav-list-link">ARCHIVE</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">UNIX process UID model</h1><div class="post-info">2019年5月13日</div><div class="post-content"><p>In UNIX environment, each process has three user id: real user id, effective user id, saved set-user-id. How these three UID are set is depended on whether the setuid bit of executable file has been set. The table bellow shows how these three UID will change after a <code>exec</code> system call.</p>
+<table>
+<thead>
+<tr>
+<th align="left">setuid bit</th>
+<th align="left">real user id</th>
+<th align="left">effective user id</th>
+<th align="left">saved set-user-id</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">set</td>
+<td align="left">unchanged</td>
+<td align="left">the owner of executable file</td>
+<td align="left">copy from effective user id</td>
+</tr>
+<tr>
+<td align="left">unset</td>
+<td align="left">unchanged</td>
+<td align="left">unchanged</td>
+<td align="left">copy from effective user id</td>
+</tr>
+</tbody></table>
+<p>Here is a demo, I first compile a simple program into <code>a.out</code>, then use <code>chown root:root a.out</code> to change the ower of the executable file, after that I use <code>chmod +s a.out</code> to set setuid bit. The output of <code>ls -l a.out</code> is: <code>-rwsrwsr-x 1 root root 14600 Apr 24 08:02 a.out</code>. After start <code>a.out</code>, the output of <code>ps -o pid,ppid,euid,ruid,suid,cmd -p 16990,17210</code> is:</p>
+<table>
+<thead>
+<tr>
+<th align="left">PID</th>
+<th align="left">PPID</th>
+<th align="left">EUID</th>
+<th align="left">RUID</th>
+<th align="left">SUID</th>
+<th align="left">CMD</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">16990</td>
+<td align="left">16989</td>
+<td align="left">1001</td>
+<td align="left">1001</td>
+<td align="left">1001</td>
+<td align="left">-bash</td>
+</tr>
+<tr>
+<td align="left">17210</td>
+<td align="left">16990</td>
+<td align="left">0</td>
+<td align="left">1001</td>
+<td align="left">0</td>
+<td align="left">./a.out</td>
+</tr>
+</tbody></table>
+<p>We can notice that EUID of <code>a.out</code> is root, RUID keeps same as its parent process, SUID is same as EUID.</p>
+<hr>
+<p>Permission check is based on effective user id. UNIX system provides these system calls to manipulate these three UID: <a href="http://man7.org/linux/man-pages/man2/setuid.2.html" target="_blank" rel="noopener">setuid</a>, <a href="http://man7.org/linux/man-pages/man2/seteuid.2.html" target="_blank" rel="noopener">seteuid</a>. How these system call affect three UID is based on whether the process has root privilege.</p>
+<table>
+<thead>
+<tr>
+<th align="left">system call</th>
+<th align="left">ID</th>
+<th align="left">root privilege</th>
+<th align="left">non root privilege</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>setuid(uid)</code></td>
+<td align="left">real user id</td>
+<td align="left">set to uid</td>
+<td align="left">unchanged</td>
+</tr>
+<tr>
+<td align="left"><code>setuid(uid)</code></td>
+<td align="left">effective user id</td>
+<td align="left">set to uid</td>
+<td align="left">set to uid. uid must equal to ruid or suid, else return error</td>
+</tr>
+<tr>
+<td align="left"><code>setuid(uid)</code></td>
+<td align="left">saved set-user-id</td>
+<td align="left">set to uid</td>
+<td align="left">unchanged</td>
+</tr>
+</tbody></table>
+<table>
+<thead>
+<tr>
+<th align="left">system call</th>
+<th align="left">ID</th>
+<th align="left">root privilege</th>
+<th align="left">non root privilege</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>seteuid(uid)</code></td>
+<td align="left">real user id</td>
+<td align="left">unchanged</td>
+<td align="left">unchanged</td>
+</tr>
+<tr>
+<td align="left"><code>seteuid(uid)</code></td>
+<td align="left">effective user id</td>
+<td align="left">set to uid</td>
+<td align="left">set to uid. uid must equal to ruid or suid, else return error</td>
+</tr>
+<tr>
+<td align="left"><code>seteuid(uid)</code></td>
+<td align="left">saved set-user-id</td>
+<td align="left">unchanged</td>
+<td align="left">unchanged</td>
+</tr>
+</tbody></table>
+<p>One use case of this model is a program we all familiar with: <code>sudo</code>, <code>ll /usr/bin/sudo</code>: <code>-rwsr-xr-x 1 root root 149080 Jan 18  2018 /usr/bin/sudo</code>.<br>We can see that <code>sudo</code> has setuid bit setted. What happened after we type <code>sudo some-command</code>. The shell will start <code>sudo</code> with <code>some-command</code> as its arguments. As <code>sudo</code> has setuid bit set, so <code>sudo</code> will have ruid set to normal user, euid and suid set to root. Then <code>sudo</code> call <code>setuid(0)</code> change all three UID to root, after that <code>sudo</code> will <code>fork</code> and <code>exec</code> our command, so our command will be executed as all three UID set to root. This is just a brief process, permission check and ask password stuff all ignored.</p>
+</div></article></div></main><footer><div class="paginator"><a href="/2020/05/31/bpftrace-kernel-journey/" class="prev">上一篇</a><a href="/2019/03/14/Go-dependency-management-introduction/" class="next">下一篇</a></div><div class="copyright"><p>© 2018 - 2025 <a href="http://dlee-libo.github.io">dlee</a>, powered by <a href="https://hexo.io/" target="_blank">Hexo</a> and <a href="https://github.com/pinggod/hexo-theme-apollo" target="_blank">hexo-theme-apollo</a>.</p></div></footer></div><!--script(async src="//cdn.bootcss.com/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML" integrity="sha384-crwIf/BuaWM9rM65iM+dWFldgQ1Un8jWZMuh3puxb8TOY9+linwLoI7ZHZT+aekW" crossorigin="anonymous")--></body></html>
