@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Structura - JSON/YAML Viewer</title>
+    
+    <!-- 1. Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. js-yaml for parsing YAML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    
+    <!-- 3. Babel for compiling JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-200 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
+
+    <!-- 4. The Application Logic -->
+    <script type="text/babel" data-type="module">
+        // Import React and Icons directly from a CDN
+        import React, { useState, useEffect, useCallback } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+            ChevronRight, ChevronDown, Copy, Trash2, AlertCircle, 
+            FileJson, Braces, List, Check, PanelLeft 
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // --- Component: Value Renderer ---
+        const ValueRenderer = ({ value }) => {
+            if (value === null) return <span className="text-gray-400 italic">null</span>;
+            if (value === undefined) return <span className="text-gray-400 italic">undefined</span>;
+            
+            const type = typeof value;
+
+            if (type === 'boolean') {
+                return <span className="text-purple-400 font-semibold">{value.toString()}</span>;
+            }
+            
+            if (type === 'number') {
+                return <span className="text-blue-400">{value}</span>;
+            }
+            
+            if (type === 'string') {
+                if (value.startsWith('http')) {
+                return (
+                    <a href={value} target="_blank" rel="noopener noreferrer" className="text-green-400 underline hover:text-green-300 break-all">
+                    "{value}"
+                    </a>
+                );
+                }
+                return <span className="text-green-400 break-all">"{value}"</span>;
+            }
+
+            return <span className="text-gray-300">{String(value)}</span>;
+        };
+
+        // --- Component: Tree Node ---
+        const TreeNode = ({ name, value, depth = 0, isLast, isIndex }) => {
+            const [expanded, setExpanded] = useState(true);
+            
+            const isObject = value !== null && typeof value === 'object';
+            const isArray = Array.isArray(value);
+            const isEmpty = isObject && Object.keys(value).length === 0;
+
+            const toggle = () => setExpanded(!expanded);
+            const paddingLeft = `${depth * 1.5}rem`;
+
+            if (!isObject) {
+                return (
+                <div 
+                    className="flex items-start py-1 hover:bg-slate-800/50 rounded px-2 font-mono text-sm transition-colors"
+                    style={{ paddingLeft }}
+                >
+                    <span className="text-slate-400 mr-2 shrink-0 select-none">
+                    {isIndex ? (
+                        <span className="text-slate-600 text-xs mr-2 font-sans opacity-70 w-4 text-right inline-block">
+                        {name}
+                        </span>
+                    ) : (
+                        name !== undefined && <span className="text-purple-300">{name}: </span>
+                    )}
+                    </span>
+                    <ValueRenderer value={value} />
+                    {!isLast && <span className="text-slate-500">,</span>}
+                </div>
+                );
+            }
+
+            const keys = Object.keys(value);
+            const itemCount = keys.length;
+
+            return (
+                <div className="font-mono text-sm">
+                <div 
+                    className="flex items-center py-1 hover:bg-slate-800/50 rounded px-2 cursor-pointer group transition-colors select-none"
+                    style={{ paddingLeft }}
+                    onClick={toggle}
+                >
+                    <span className="mr-1 text-slate-500 group-hover:text-white transition-colors">
+                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </span>
+                    
+                    {isIndex ? (
+                        <span className="text-slate-600 text-xs mr-2 font-sans opacity-70 w-4 text-right inline-block">
+                        {name}
+                        </span>
+                    ) : (
+                    <span className="text-purple-300 mr-2">
+                        {name !== undefined && `${name}: `} 
+                    </span>
+                    )}
+
+                    <span className="text-slate-400 flex items-center gap-2">
+                    {isArray ? <List size={14} className="text-blue-400" /> : <Braces size={14} className="text-yellow-400" />}
+                    {expanded ? (
+                        <span>
+                        {isArray ? '[' : '{'}
+                        </span>
+                    ) : (
+                        <span className="opacity-70">
+                        {isArray ? `Array(${itemCount})` : `Object{${itemCount}}`}
+                        </span>
+                    )}
+                    </span>
+                </div>
+
+                {expanded && !isEmpty && (
+                    <div>
+                    {keys.map((key, index) => (
+                        <TreeNode 
+                        key={key} 
+                        name={key}
+                        isIndex={isArray}
+                        value={value[key]} 
+                        depth={depth + 1} 
+                        isLast={index === keys.length - 1}
+                        />
+                    ))}
+                    <div 
+                        className="py-1 px-2 text-slate-400 hover:bg-slate-800/50 rounded"
+                        style={{ paddingLeft }}
+                    >
+                        {isArray ? ']' : '}'}{!isLast && ','}
+                    </div>
+                    </div>
+                )}
+                
+                {expanded && isEmpty && (
+                    <div 
+                    className="py-1 px-2 text-slate-500 italic"
+                    style={{ paddingLeft: `${(depth + 1) * 1.5}rem` }}
+                    >
+                    (empty)
+                    </div>
+                )}
+                {expanded && isEmpty && (
+                    <div 
+                        className="py-1 px-2 text-slate-400"
+                        style={{ paddingLeft }}
+                    >
+                    {isArray ? ']' : '}'}{!isLast && ','}
+                    </div>
+                )}
+                </div>
+            );
+        };
+
+        // --- Main Application ---
+        const App = () => {
+            // NOTE: No need for useScript hook anymore, jsyaml is loaded in head
+            
+            const [input, setInput] = useState('{\n  "projectName": "JSON-YAML-Viewer",\n  "version": 1.0,\n  "features": [\n    "Live Parsing",\n    "Syntax Highlighting",\n    "Tree View"\n  ],\n  "settings": {\n    "theme": "Dark",\n    "autoExpand": true\n  }\n}');
+            const [parsedData, setParsedData] = useState(null);
+            const [error, setError] = useState(null);
+            const [format, setFormat] = useState('JSON');
+            const [copied, setCopied] = useState(false);
+            const [showInput, setShowInput] = useState(true);
+
+            const parseInput = useCallback((text) => {
+                if (!text.trim()) {
+                    setParsedData(null);
+                    setError(null);
+                    setFormat('Empty');
+                    return;
+                }
+
+                try {
+                    const json = JSON.parse(text);
+                    setParsedData(json);
+                    setError(null);
+                    setFormat('JSON');
+                    return;
+                } catch (jsonErr) {
+                    if (window.jsyaml) {
+                        try {
+                            const yaml = window.jsyaml.load(text);
+                            if (typeof yaml === 'object' && yaml !== null) {
+                                setParsedData(yaml);
+                                setError(null);
+                                setFormat('YAML');
+                                return;
+                            }
+                        } catch (yamlErr) {
+                            setError(jsonErr.message);
+                        }
+                    } else {
+                        setError("Invalid JSON (YAML parser not loaded)");
+                    }
+                }
+            }, []);
+
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    parseInput(input);
+                }, 300);
+                return () => clearTimeout(timer);
+            }, [input, parseInput]);
+
+            const handleCopy = () => {
+                navigator.clipboard.writeText(input);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+
+            const handleFormat = () => {
+                if (parsedData) {
+                    setInput(JSON.stringify(parsedData, null, 2));
+                }
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
+                {/* Header */}
+                <header className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800 shadow-md z-10">
+                    <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowInput(!showInput)}
+                        className={`p-2 rounded-lg transition-colors border border-transparent ${
+                        showInput 
+                            ? 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700' 
+                            : 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                        }`}
+                        title={showInput ? "Hide Input" : "Show Input"}
+                    >
+                        <PanelLeft size={20} />
+                    </button>
+
+                    <div className="p-2 bg-indigo-600 rounded-lg">
+                        <Braces className="text-white" size={24} />
+                    </div>
+                    <div>
+                        <h1 className="font-bold text-lg text-white tracking-tight">Structura</h1>
+                        <p className="text-xs text-slate-400">JSON & YAML Visualizer</p>
+                    </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                        error ? 'border-red-900 bg-red-900/20 text-red-400' : 
+                        format === 'JSON' ? 'border-blue-900 bg-blue-900/20 text-blue-400' :
+                        format === 'YAML' ? 'border-purple-900 bg-purple-900/20 text-purple-400' :
+                        'border-slate-700 bg-slate-800 text-slate-500'
+                    }`}>
+                        {error ? 'INVALID' : format}
+                    </div>
+                    </div>
+                </header>
+
+                {/* Main Content */}
+                <main className="flex flex-col md:flex-row flex-1 overflow-hidden">
+                    
+                    {/* Editor Pane */}
+                    {showInput && (
+                    <div className="flex flex-col w-full md:w-1/2 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-900/50">
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            <FileJson size={14} /> Input
+                        </span>
+                        <div className="flex gap-2">
+                            <button 
+                            onClick={handleFormat}
+                            disabled={!!error || !parsedData}
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors"
+                            title="Format JSON"
+                            >
+                            <span className="text-xs font-mono font-bold">{'{}'}</span>
+                            </button>
+                            <button 
+                            onClick={() => setInput('')}
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded transition-colors"
+                            title="Clear"
+                            >
+                            <Trash2 size={16} />
+                            </button>
+                            <button 
+                            onClick={handleCopy}
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors relative"
+                            title="Copy Raw"
+                            >
+                            {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                            </button>
+                        </div>
+                        </div>
+                        <div className="relative flex-1">
+                        <textarea 
+                            className="w-full h-full bg-slate-950 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-slate-300 custom-scrollbar"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="Paste your JSON or YAML here..."
+                            spellCheck="false"
+                        />
+                        </div>
+                    </div>
+                    )}
+
+                    {/* Viewer Pane */}
+                    <div className={`flex flex-col ${showInput ? 'w-full md:w-1/2' : 'w-full'} bg-slate-950 transition-all duration-300 ease-in-out`}>
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <List size={14} /> Tree View
+                        </span>
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+                        {error ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center p-8 opacity-70">
+                            <AlertCircle size={48} className="text-red-500 mb-4" />
+                            <h3 className="text-lg font-medium text-red-400 mb-2">Parse Error</h3>
+                            <p className="text-sm text-slate-500 font-mono break-words w-full max-w-md bg-slate-900 p-4 rounded border border-slate-800">
+                            {error}
+                            </p>
+                        </div>
+                        ) : parsedData ? (
+                        <div className="w-full">
+                            <TreeNode value={parsedData} isLast={true} />
+                        </div>
+                        ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-600">
+                            <p>Waiting for input...</p>
+                        </div>
+                        )}
+                    </div>
+                    </div>
+                </main>
+
+                {/* Footer/Status Bar */}
+                <footer className="bg-slate-900 border-t border-slate-800 px-4 py-1 text-xs text-slate-500 flex justify-between">
+                    <div>
+                    {parsedData && (
+                        <span>
+                        {Array.isArray(parsedData) 
+                            ? `Root: Array (${parsedData.length} items)` 
+                            : typeof parsedData === 'object' 
+                            ? `Root: Object (${Object.keys(parsedData).length} keys)` 
+                            : `Root: ${typeof parsedData}`}
+                        </span>
+                    )}
+                    </div>
+                    <div className="flex gap-4">
+                    <span>Ln {input.split('\n').length}</span>
+                    </div>
+                </footer>
+                
+                <style>{`
+                    .custom-scrollbar::-webkit-scrollbar {
+                    width: 10px;
+                    height: 10px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                    background: #0f172a;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: #334155;
+                    border-radius: 5px;
+                    border: 2px solid #0f172a;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #475569;
+                    }
+                `}</style>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
